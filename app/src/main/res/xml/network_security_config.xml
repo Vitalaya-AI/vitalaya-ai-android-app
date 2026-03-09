@@ -3,5 +3,7 @@
     <domain-config cleartextTrafficPermitted="false">
         <domain includeSubdomains="true">generativelanguage.googleapis.com</domain>
     </domain-config>
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">vitalalya-ai-backend.onrender.com</domain>
+    </domain-config>
 </network-security-config>
-

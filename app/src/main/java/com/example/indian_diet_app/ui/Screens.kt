@@ -1,5 +1,6 @@
 package com.example.indian_diet_app.ui
 
+// Screens: OnboardingScreen, MedicalInputScreen, DashboardScreen
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
@@ -17,7 +18,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.alpha
@@ -32,6 +32,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import java.util.Locale
+import kotlinx.coroutines.delay
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.indian_diet_app.model.*
@@ -44,7 +45,7 @@ import com.example.indian_diet_app.viewmodel.PlannerViewModel
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-fun OnboardingScreen(viewModel: PlannerViewModel, onNext: () -> Unit) {
+fun OnboardingScreen(viewModel: PlannerViewModel, onNext: () -> Unit, onLogout: () -> Unit) {
     val userProfile by viewModel.userProfile.collectAsState()
     var currentStep by remember { mutableIntStateOf(0) }
     val totalSteps = 4
@@ -83,7 +84,7 @@ fun OnboardingScreen(viewModel: PlannerViewModel, onNext: () -> Unit) {
                 )
             }
 
-            StepProgressBar(currentStep = currentStep, totalSteps = totalSteps)
+            StepProgressBar(currentStep = currentStep)
             Spacer(modifier = Modifier.height(6.dp))
 
             // Floating content card with wave top
@@ -121,7 +122,7 @@ fun OnboardingScreen(viewModel: PlannerViewModel, onNext: () -> Unit) {
 
                     // Nav buttons inside the white card
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 32.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         if (currentStep > 0) {
@@ -154,6 +155,15 @@ fun OnboardingScreen(viewModel: PlannerViewModel, onNext: () -> Unit) {
                             }
                         }
                     }
+                    // Logout button at bottom of onboarding card
+                    TextButton(
+                        onClick = onLogout,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 24.dp)
+                    ) {
+                        Text("🚪", fontSize = 14.sp)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Logout", color = Color.Gray, fontSize = 13.sp)
+                    }
                 }
             }
         }
@@ -167,7 +177,8 @@ private fun isStepValid(step: Int, profile: UserProfile): Boolean = when (step) 
 }
 
 @Composable
-private fun StepProgressBar(currentStep: Int, totalSteps: Int = 4) {
+private fun StepProgressBar(currentStep: Int) {
+    val totalSteps = 4
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -235,7 +246,7 @@ private fun StepName(profile: UserProfile, viewModel: PlannerViewModel) {
         ) {
             Text("🌿", fontSize = 20.sp)
             Text(
-                "Combines a Rule-Based Expert System with Gemini AI to create your fully personalized Indian diet plan.",
+                "Our Hybrid AI engine crafts your fully personalized Indian diet plan based on your unique profile.",
                 fontSize = 12.sp, color = Color(0xFF2E5C35), lineHeight = 19.sp
             )
         }
@@ -405,9 +416,18 @@ private fun StepDietType(profile: UserProfile, viewModel: PlannerViewModel) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-fun MedicalInputScreen(viewModel: PlannerViewModel, onGenerate: () -> Unit, onSkip: () -> Unit) {
+fun MedicalInputScreen(viewModel: PlannerViewModel, onNavigateToDashboard: () -> Unit, onLogout: () -> Unit) {
     val medicalProfile by viewModel.medicalProfile.collectAsState()
+    val planState by viewModel.planState.collectAsState()
     var expandedInfo by remember { mutableStateOf(false) }
+
+    // Navigate to dashboard only when the plan is Ready — fixes the race condition
+    // where the old code navigated immediately before generatePlan() completed.
+    LaunchedEffect(planState) {
+        if (planState is PlanState.Ready) {
+            onNavigateToDashboard()
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Blue header background
@@ -460,7 +480,7 @@ fun MedicalInputScreen(viewModel: PlannerViewModel, onGenerate: () -> Unit, onSk
                                 Icon(if (expandedInfo) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, null, tint = Color(0xFF1565C0))
                             }
                             AnimatedVisibility(visible = expandedInfo) {
-                                Text("Rule engine checks thresholds: TSH > 4.5 → hypothyroid meals, blood sugar > 100 → low-GI plan, Vitamin D < 20 → D-rich foods. All on-device.",
+                                Text("The hybrid AI engine considers your medical background to personalize your diet plan securely on our backend.",
                                     modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 14.dp),
                                     fontSize = 12.sp, color = Color(0xFF1565C0), lineHeight = 19.sp)
                             }
@@ -493,26 +513,45 @@ fun MedicalInputScreen(viewModel: PlannerViewModel, onGenerate: () -> Unit, onSk
                     Spacer(modifier = Modifier.height(24.dp))
                     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
                         Button(
-                            onClick = { viewModel.generatePlan(); onGenerate() },
+                            onClick = { viewModel.generatePlan(includeMedical = true) },
                             modifier = Modifier.fillMaxWidth().height(56.dp),
                             shape = RoundedCornerShape(18.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
                             contentPadding = PaddingValues(0.dp),
-                            elevation = ButtonDefaults.buttonElevation(8.dp)
+                            elevation = ButtonDefaults.buttonElevation(8.dp),
+                            enabled = planState !is PlanState.Generating
                         ) {
                             Box(modifier = Modifier.fillMaxSize()
                                 .background(Brush.horizontalGradient(listOf(Green40, GreenAccent)), RoundedCornerShape(18.dp)),
                                 contentAlignment = Alignment.Center) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Favorite, null, tint = Color.White, modifier = Modifier.size(20.dp))
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Text("Generate My Plan", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
+                                if (planState is PlanState.Generating) {
+                                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Favorite, null, tint = Color.White, modifier = Modifier.size(20.dp))
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Text("Generate My Plan", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
+                                    }
                                 }
                             }
                         }
                         Spacer(modifier = Modifier.height(10.dp))
-                        TextButton(onClick = { viewModel.generatePlan(); onSkip() }, modifier = Modifier.fillMaxWidth()) {
+                        TextButton(
+                            onClick = { viewModel.generatePlan(includeMedical = false) },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = planState !is PlanState.Generating
+                        ) {
                             Text("Skip for now", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        // Logout button
+                        TextButton(
+                            onClick = onLogout,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("🚪", fontSize = 14.sp)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Logout", color = Color.Gray, fontSize = 13.sp)
                         }
                     }
                     Spacer(modifier = Modifier.height(36.dp))
@@ -540,114 +579,509 @@ private fun MedicalField(value: String, onValueChange: (String) -> Unit, label: 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DASHBOARD SCREEN
+// DASHBOARD SCREEN  (new sidebar-aware design)
 // ─────────────────────────────────────────────────────────────────────────────
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DashboardScreen(viewModel: PlannerViewModel) {
-    val planState by viewModel.planState.collectAsState()
+fun DashboardScreen(
+    viewModel: PlannerViewModel,
+    onOpenDrawer: () -> Unit,
+    onNavigateToGenerate: () -> Unit,
+    onLogout: () -> Unit,
+    onUnauthorized: () -> Unit
+) {
+    val planState   by viewModel.planState.collectAsState()
     val userProfile by viewModel.userProfile.collectAsState()
-    when (val state = planState) {
-        is PlanState.Idle -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No plan yet.") }
-        is PlanState.GeneratingRuleBased -> GeneratingScreen("Applying diet rules…")
-        is PlanState.EnhancingWithAI    -> GeneratingScreen("Enhancing with AI…", isAI = true)
-        is PlanState.Ready              -> DashboardContent(state.plan, userProfile)
-        is PlanState.Error              -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Error: ${state.message}", color = MaterialTheme.colorScheme.error)
-        }
+
+    LaunchedEffect(Unit) {
+        if (planState is PlanState.Idle) viewModel.loadCurrentPlan()
     }
-}
-
-@Composable
-private fun GeneratingScreen(message: String, isAI: Boolean = false) {
-    val alpha by rememberInfiniteTransition(label = "p").animateFloat(
-        0.4f, 1f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "a")
-    val colors = if (isAI) listOf(Color(0xFF0D47A1), Color(0xFF1976D2), Color(0xFF90CAF9))
-                 else      listOf(Color(0xFF1B5E20), Color(0xFF2E7D32), Color(0xFFA5D6A7))
-    Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(colors)), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(20.dp)) {
-            // Pulsing ring
-            val scale by rememberInfiniteTransition(label = "s").animateFloat(
-                0.9f, 1.1f, infiniteRepeatable(tween(1000), RepeatMode.Reverse), label = "sc")
-            Box(modifier = Modifier.size((64 * scale).dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Color.White, strokeWidth = 3.dp, modifier = Modifier.fillMaxSize())
-                Text(if (isAI) "✨" else "⚙️", fontSize = 24.sp)
-            }
-            Text(message, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            Text(if (isAI) "Gemini is crafting your meals…" else "Running medical + goal rules…",
-                color = Color.White.copy(alpha), fontSize = 13.sp)
-        }
+    LaunchedEffect(planState) {
+        if (planState is PlanState.Unauthorized) onUnauthorized()
     }
-}
 
-@Composable
-private fun DashboardContent(plan: DailyPlan, user: UserProfile) {
-    Column(modifier = Modifier.fillMaxSize().background(Color(0xFFF0F7F0)).verticalScroll(rememberScrollState())) {
-
-        // ── Hero ─────────────────────────────────────────────────────────────
-        Box(modifier = Modifier.fillMaxWidth()) {
-            // Background gradient + decorative circles
-            Box(modifier = Modifier.fillMaxWidth().height(280.dp)
-                .background(Brush.verticalGradient(listOf(Color(0xFF1B5E20), Color(0xFF2E7D32), GreenAccent))))
-            Box(modifier = Modifier.size(200.dp).align(Alignment.TopEnd).offset(40.dp, (-20).dp).alpha(0.15f)
-                .background(Color.White, CircleShape))
-            Box(modifier = Modifier.size(140.dp).offset((-20).dp, 120.dp).alpha(0.12f)
-                .background(GreenAccent, CircleShape))
-
-            Column(modifier = Modifier.padding(top = 36.dp, start = 24.dp, end = 24.dp, bottom = 40.dp)) {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Column {
-                        Text("Good day,", color = Color.White.copy(0.8f), fontSize = 13.sp)
-                        Text(user.name.ifBlank { "there" } + " 👋", color = Color.White, style = MaterialTheme.typography.headlineMedium)
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("🏠", fontSize = 18.sp)
+                        Text("Dashboard", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                     }
-                    if (plan.isLlmEnhanced) {
-                        Surface(shape = RoundedCornerShape(20.dp), color = Color.White.copy(0.18f)) {
-                            Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text("✨", fontSize = 12.sp)
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("AI Enhanced", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                            }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onOpenDrawer) {
+                        Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color(0xFF1B5E20),
+                    titleContentColor = Color.White
+                )
+            )
+        },
+        containerColor = Color(0xFFF0F7F0)
+    ) { padding ->
+        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
+            when (val state = planState) {
+                is PlanState.Idle         -> DashboardLoadingState("Checking active plans…")
+                is PlanState.Generating   -> GeneratingScreen()
+                is PlanState.Unauthorized -> DashboardLoadingState("Redirecting…")
+                is PlanState.Error        -> {
+                    val isNoPlan = state.message.contains("No active plan", ignoreCase = true)
+                    if (isNoPlan) {
+                        DashboardNoPlanState(user = userProfile, onNavigateToGenerate = onNavigateToGenerate)
+                    } else {
+                        DashboardErrorState(
+                            message  = state.message,
+                            onRetry  = { viewModel.loadCurrentPlan() },
+                            onLogout = onLogout
+                        )
+                    }
+                }
+                is PlanState.Ready        -> DashboardContent(
+                    plan = state.plan,
+                    user = userProfile,
+                    onNavigateToGenerate = onNavigateToGenerate,
+                    onRegenerate = { viewModel.generatePlan(includeMedical = true) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DashboardLoadingState(message: String) {
+    Box(modifier = Modifier.fillMaxSize().background(Color(0xFFF0F7F0)), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            CircularProgressIndicator(color = Green40, strokeWidth = 3.dp)
+            Text(message, color = Color(0xFF4A7C59), fontSize = 14.sp)
+        }
+    }
+}
+
+@Composable
+private fun DashboardErrorState(message: String, onRetry: () -> Unit, onLogout: () -> Unit) {
+    Box(modifier = Modifier.fillMaxSize().background(Color(0xFFF0F7F0)), contentAlignment = Alignment.Center) {
+        Column(
+            modifier = Modifier.padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text("😔", fontSize = 48.sp)
+            Text("Something went wrong", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Color(0xFF3E3E3E))
+            Text(message, color = Color(0xFF78909C), fontSize = 13.sp, textAlign = TextAlign.Center, lineHeight = 20.sp)
+            Button(
+                onClick = onRetry,
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Green40),
+                modifier = Modifier.fillMaxWidth().height(50.dp)
+            ) { Text("Try Again", fontWeight = FontWeight.Bold) }
+            TextButton(onClick = onLogout) { Text("Logout", color = Color(0xFF78909C)) }
+        }
+    }
+}
+
+@Composable
+private fun DashboardNoPlanState(user: UserProfile, onNavigateToGenerate: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFF0F7F0))
+            .verticalScroll(rememberScrollState())
+            .padding(bottom = 24.dp)
+    ) {
+        // Welcome banner
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Brush.verticalGradient(listOf(Color(0xFF1B5E20), Color(0xFF2E7D32))))
+                .padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 28.dp)
+        ) {
+            Column {
+                Text("Good day,", color = Color.White.copy(0.8f), fontSize = 13.sp)
+                Text(
+                    user.name.ifBlank { "there" } + " 👋",
+                    color = Color.White,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
+        }
+
+        // Quick stats — show weight only, others empty
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).offset(y = (-16).dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            QuickStatCard(emoji = "⚖️", label = "Weight", value = if (user.weight > 0) "${user.weight.toInt()} kg" else "—", modifier = Modifier.weight(1f))
+            QuickStatCard(emoji = "🔥", label = "Target Cal", value = "—", modifier = Modifier.weight(1f))
+            QuickStatCard(emoji = "📋", label = "Plan", value = "None", valueColor = Color(0xFFE65100), modifier = Modifier.weight(1f))
+            QuickStatCard(emoji = "🍽️", label = "Meals", value = "0/0", modifier = Modifier.weight(1f))
+        }
+
+        // Action cards row
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).offset(y = (-8).dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Generate CTA (full emphasis)
+            Card(
+                modifier = Modifier.weight(1f).clickable { onNavigateToGenerate() },
+                shape = RoundedCornerShape(20.dp),
+                elevation = CardDefaults.cardElevation(4.dp)
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxWidth()
+                        .background(Brush.verticalGradient(listOf(Color(0xFF0A3D0A), GreenAccent)))
+                        .padding(16.dp)
+                ) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("✨", fontSize = 32.sp)
+                        Text("Generate\nSmart Plan", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, textAlign = TextAlign.Center, lineHeight = 18.sp)
+                        Text("Tap to create\na new plan", color = Color.White.copy(0.75f), fontSize = 11.sp, textAlign = TextAlign.Center, lineHeight = 16.sp)
+                    }
+                }
+            }
+            // Today's plan — empty state
+            Card(
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(4.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp).fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text("Today's Plan", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF2E7D32))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("🍽️", fontSize = 40.sp)
+                    Text("No plan yet", fontSize = 12.sp, color = Color(0xFF90A4AE), textAlign = TextAlign.Center)
+                    Text("Generate one to\nget started!", fontSize = 11.sp, color = Color(0xFFB0BEC5), textAlign = TextAlign.Center, lineHeight = 16.sp)
+                }
+            }
+        }
+
+        // Invite to generate
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).clickable { onNavigateToGenerate() },
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(3.dp)
+        ) {
+            Row(modifier = Modifier.padding(20.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(GreenAccent.copy(0.12f)), contentAlignment = Alignment.Center) {
+                    Text("🤖", fontSize = 24.sp)
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Ready to start?", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text("Tap here to generate your personalized Indian diet plan now.", fontSize = 12.sp, color = Color(0xFF78909C), lineHeight = 18.sp)
+                }
+                Icon(Icons.Default.KeyboardArrowRight, contentDescription = null, tint = GreenAccent)
+            }
+        }
+    }
+}
+
+@Composable
+private fun GeneratingScreen() {
+    val steps = listOf(
+        "🔍" to "Analysing your profile…",
+        "🧮" to "Calculating macros & BMR…",
+        "🌾" to "Selecting Indian foods…",
+        "🤖" to "AI crafting meal combos…",
+        "✨" to "Personalising your plan…",
+        "📋" to "Finalising diet schedule…"
+    )
+    var currentStep by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(2200L)
+            currentStep = (currentStep + 1) % steps.size
+        }
+    }
+
+    val bgColors = listOf(Color(0xFF0A3D0A), Color(0xFF1B5E20), Color(0xFF2E7D32))
+    Box(
+        modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(bgColors)),
+        contentAlignment = Alignment.Center
+    ) {
+        // Decorative circles
+        Box(modifier = Modifier.size(300.dp).align(Alignment.TopEnd).offset(80.dp, (-40).dp).alpha(0.07f)
+            .background(Color.White, CircleShape))
+        Box(modifier = Modifier.size(200.dp).align(Alignment.BottomStart).offset((-40).dp, 60.dp).alpha(0.06f)
+            .background(GreenAccent, CircleShape))
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(0.dp),
+            modifier = Modifier.padding(40.dp)
+        ) {
+            // Pulsing icon
+            val scale by rememberInfiniteTransition(label = "scl").animateFloat(
+                0.88f, 1.12f, infiniteRepeatable(tween(1100, easing = EaseInOutSine), RepeatMode.Reverse), label = "sc"
+            )
+            Box(
+                modifier = Modifier
+                    .size((72 * scale).dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.15f))
+                    .border(2.dp, Color.White.copy(alpha = 0.3f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(
+                    color = Color.White,
+                    strokeWidth = 2.5.dp,
+                    modifier = Modifier.fillMaxSize().padding(6.dp)
+                )
+                Text("🥗", fontSize = 28.sp)
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            Text(
+                "Building Your Plan",
+                color = Color.White,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.ExtraBold,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "Vitalaya AI is crafting a fully personalized Indian diet just for you",
+                color = Color.White.copy(alpha = 0.75f),
+                fontSize = 13.sp,
+                textAlign = TextAlign.Center,
+                lineHeight = 20.sp
+            )
+
+            Spacer(modifier = Modifier.height(36.dp))
+
+            // Animated step card
+            AnimatedContent(
+                targetState = currentStep,
+                transitionSpec = {
+                    (slideInVertically { it / 2 } + fadeIn()) togetherWith (slideOutVertically { -it / 2 } + fadeOut())
+                },
+                label = "step"
+            ) { step ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color.White.copy(alpha = 0.15f))
+                        .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(16.dp))
+                        .padding(horizontal = 20.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(steps[step].first, fontSize = 22.sp)
+                    Text(
+                        steps[step].second,
+                        color = Color.White,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Step dots
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                steps.forEachIndexed { i, _ ->
+                    val w by animateDpAsState(if (i == currentStep) 20.dp else 6.dp, spring(Spring.DampingRatioMediumBouncy), label = "d$i")
+                    Box(
+                        modifier = Modifier.height(6.dp).width(w)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(if (i == currentStep) Color.White else Color.White.copy(0.3f))
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            Text(
+                "This usually takes 10–25 seconds",
+                color = Color.White.copy(alpha = 0.5f),
+                fontSize = 11.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun DashboardContent(
+    plan: DailyPlan,
+    user: UserProfile,
+    onNavigateToGenerate: () -> Unit,
+    onRegenerate: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(bottom = 24.dp)
+    ) {
+        // ── Welcome Banner ────────────────────────────────────────────────────
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Brush.verticalGradient(listOf(Color(0xFF1B5E20), Color(0xFF2E7D32))))
+                .padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 28.dp)
+        ) {
+            Column {
+                Text("Good day,", color = Color.White.copy(0.8f), fontSize = 13.sp)
+                Text(
+                    user.name.ifBlank { "there" } + " 👋",
+                    color = Color.White,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.ExtraBold
+                )
+                if (plan.isLlmEnhanced) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Surface(shape = RoundedCornerShape(20.dp), color = Color.White.copy(0.18f)) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text("✨", fontSize = 11.sp)
+                            Text("AI Enhanced Plan Active", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(20.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                    CalorieRing(plan.targetCalories)
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        StatPill("⚡", "BMR", "${plan.bmr} kcal")
-                        StatPill("🔥", "TDEE", "${plan.tdee} kcal")
-                        StatPill(user.goal.emoji, "Goal", user.goal.label)
+            }
+        }
+
+        // ── Quick Stats Row ───────────────────────────────────────────────────
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .offset(y = (-16).dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            QuickStatCard(
+                emoji = "⚖️",
+                label = "Weight",
+                value = if (user.weight > 0) "${user.weight.toInt()} kg" else "—",
+                modifier = Modifier.weight(1f)
+            )
+            QuickStatCard(
+                emoji = "🔥",
+                label = "Target Cal",
+                value = "${plan.targetCalories} kcal",
+                modifier = Modifier.weight(1f)
+            )
+            QuickStatCard(
+                emoji = "📋",
+                label = "Plan",
+                value = "Active",
+                valueColor = GreenAccent,
+                modifier = Modifier.weight(1f)
+            )
+            QuickStatCard(
+                emoji = "🍽️",
+                label = "Meals",
+                value = "${plan.meals.size}/${plan.meals.size}",
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        // ── Action Cards ──────────────────────────────────────────────────────
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .offset(y = (-8).dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Left — Generate Smart Plan
+            Card(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onNavigateToGenerate() },
+                shape = RoundedCornerShape(20.dp),
+                elevation = CardDefaults.cardElevation(4.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Brush.verticalGradient(listOf(Color(0xFF0A3D0A), GreenAccent)))
+                        .padding(16.dp)
+                ) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("✨", fontSize = 32.sp)
+                        Text(
+                            "Generate\nSmart Plan",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 18.sp
+                        )
+                        Text(
+                            "Tap to create\na new plan",
+                            color = Color.White.copy(0.75f),
+                            fontSize = 11.sp,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 16.sp
+                        )
                     }
                 }
             }
-            // Wave at bottom of hero
-            Canvas(modifier = Modifier.fillMaxWidth().height(36.dp).align(Alignment.BottomCenter)) {
-                val p = Path().apply {
-                    moveTo(0f, size.height); cubicTo(size.width * 0.25f, 0f, size.width * 0.75f, size.height, size.width, 0f)
-                    lineTo(size.width, size.height); close()
+
+            // Right — Today's Plan summary
+            Card(
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(4.dp)
+            ) {
+                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Today's Plan", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF2E7D32))
+
+                    // Macro pie chart (simple horizontal bar representation)
+                    MacroPieBar(plan.macros)
+
+                    // Calorie progress
+                    val calorieConsumed = plan.meals.sumOf { it.calories }
+                    val progress = (calorieConsumed.toFloat() / plan.targetCalories.coerceAtLeast(1)).coerceIn(0f, 1f)
+                    val animProgress by animateFloatAsState(progress, tween(900), label = "calprog")
+                    Text("${calorieConsumed} / ${plan.targetCalories} kcal", fontSize = 10.sp, color = Color(0xFF78909C))
+                    LinearProgressIndicator(
+                        progress = { animProgress },
+                        modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                        color = GreenAccent,
+                        trackColor = Color(0xFFE0E0E0)
+                    )
+
+                    // Meal list
+                    plan.meals.take(3).forEach { meal ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(meal.emoji, fontSize = 13.sp)
+                            Text(meal.name, fontSize = 11.sp, color = Color(0xFF4A4A4A), fontWeight = FontWeight.Medium)
+                        }
+                    }
                 }
-                drawPath(p, Color(0xFFF0F7F0))
             }
         }
-
-        // ── Macro Card ───────────────────────────────────────────────────────
-        SectionCard(modifier = Modifier.padding(horizontal = 16.dp).padding(top = 8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 14.dp)) {
-                SectionIcon("📊")
-                Spacer(modifier = Modifier.width(10.dp))
-                Text("Macro Breakdown", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                MacroItem("Protein", "${plan.macros.proteinG}g", ProteinColor, "💪")
-                MacroItem("Carbs",   "${plan.macros.carbsG}g",  CarbsColor,   "⚡")
-                MacroItem("Fat",     "${plan.macros.fatG}g",    FatColor,     "🫒")
-            }
-            Spacer(modifier = Modifier.height(14.dp))
-            MacroProgressBar(plan.macros)
-        }
-
-        // ── AI Insight ───────────────────────────────────────────────────────
-        if (plan.aiInsight.isNotBlank()) AiInsightCard(plan.aiInsight, plan.isLlmEnhanced)
 
         // ── Medical Warnings ─────────────────────────────────────────────────
         if (plan.warnings.isNotEmpty()) {
@@ -669,33 +1103,131 @@ private fun DashboardContent(plan: DailyPlan, user: UserProfile) {
             }
         }
 
-        // ── Meals ────────────────────────────────────────────────────────────
+        // ── Today's Meals (full list) ─────────────────────────────────────────
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 SectionIcon("🍱")
                 Spacer(modifier = Modifier.width(10.dp))
                 Column {
                     Text("Today's Meal Plan", fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                    Text("Rule-Based${if (plan.isLlmEnhanced) " + Gemini AI" else ""}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("AI Generated", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
         plan.meals.forEach { meal -> MealCard(meal) }
 
-        // ── Tips ─────────────────────────────────────────────────────────────
-        if (plan.tips.isNotEmpty()) {
+        // ── Health Insights ───────────────────────────────────────────────────
+        val insights = buildHealthInsights(plan)
+        if (insights.isNotEmpty()) {
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    SectionIcon("💡")
+                    SectionIcon("🧠")
                     Spacer(modifier = Modifier.width(10.dp))
-                    Text("Smart Tips", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    Text("Health Insights", fontWeight = FontWeight.Bold, fontSize = 17.sp)
                 }
                 Spacer(modifier = Modifier.height(10.dp))
-                plan.tips.forEach { tip -> TipCard(tip) }
+                insights.forEach { tip -> TipCard(tip) }
             }
         }
-        Spacer(modifier = Modifier.height(36.dp))
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // ── Regenerate button ─────────────────────────────────────────────────
+        Button(
+            onClick = onRegenerate,
+            modifier = Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 16.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+            contentPadding = PaddingValues(0.dp),
+            elevation = ButtonDefaults.buttonElevation(6.dp)
+        ) {
+            Box(
+                modifier = Modifier.fillMaxSize()
+                    .background(
+                        Brush.horizontalGradient(listOf(Color(0xFF1B5E20), Green40, GreenAccent)),
+                        RoundedCornerShape(16.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("✨", fontSize = 14.sp)
+                    Text("Regenerate My Plan", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White)
+                }
+            }
+        }
     }
+}
+
+// ── Quick Stat Card ───────────────────────────────────────────────────────────
+@Composable
+private fun QuickStatCard(
+    modifier: Modifier = Modifier,
+    emoji: String,
+    label: String,
+    value: String,
+    valueColor: Color = Color(0xFF1B5E20)
+) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(4.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(emoji, fontSize = 20.sp)
+            Text(value, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp, color = valueColor, textAlign = TextAlign.Center)
+            Text(label, fontSize = 10.sp, color = Color(0xFF90A4AE), textAlign = TextAlign.Center)
+        }
+    }
+}
+
+// ── Macro Pie Bar (colored segments representing protein/carbs/fat) ────────────
+@Composable
+private fun MacroPieBar(macros: MacroBreakdown) {
+    val pCal = macros.proteinG * 4f
+    val cCal = macros.carbsG * 4f
+    val fCal = macros.fatG * 9f
+    val total = (pCal + cCal + fCal).coerceAtLeast(1f)
+    val ap by animateFloatAsState((pCal / total).coerceAtLeast(0.02f), tween(900), label = "p")
+    val ac by animateFloatAsState((cCal / total).coerceAtLeast(0.02f), tween(900), label = "c")
+    val af by animateFloatAsState((fCal / total).coerceAtLeast(0.02f), tween(900), label = "f")
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp))) {
+            Box(Modifier.weight(ap).fillMaxHeight().background(ProteinColor))
+            Box(Modifier.weight(ac).fillMaxHeight().background(CarbsColor))
+            Box(Modifier.weight(af).fillMaxHeight().background(FatColor))
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("P ${macros.proteinG}g", fontSize = 9.sp, color = ProteinColor, fontWeight = FontWeight.Bold)
+            Text("C ${macros.carbsG}g",  fontSize = 9.sp, color = CarbsColor,   fontWeight = FontWeight.Bold)
+            Text("F ${macros.fatG}g",    fontSize = 9.sp, color = FatColor,     fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+// ── Build 4 health insights from the active plan ──────────────────────────────
+private fun buildHealthInsights(plan: DailyPlan): List<String> {
+    val insights = mutableListOf<String>()
+    insights.add("🎯 Your daily calorie target is ${plan.targetCalories} kcal — stay consistent for the best results.")
+    insights.add("💪 You need ${plan.macros.proteinG}g of protein today. Prioritise dal, paneer, or eggs at each meal.")
+    val totalMeals = plan.meals.size
+    if (totalMeals > 0) {
+        insights.add("📅 You have $totalMeals meals planned. Try to log each meal as you eat to stay on track.")
+    }
+    if (plan.aiInsight.isNotBlank()) {
+        // Add the first sentence of the AI insight as an insight pill
+        val firstSentence = plan.aiInsight.split(".").firstOrNull()?.trim()
+        if (!firstSentence.isNullOrBlank()) insights.add("🤖 $firstSentence.")
+    } else {
+        insights.add("💧 Stay hydrated — aim for 8 glasses of water throughout the day alongside your meals.")
+    }
+    // Take at most 4
+    return insights.take(4)
 }
 
 @Composable
@@ -713,102 +1245,6 @@ private fun SectionCard(modifier: Modifier = Modifier, containerColor: Color = C
     }
 }
 
-@Composable
-private fun CalorieRing(targetCalories: Int) {
-    val progress by animateFloatAsState(1f, tween(1400, easing = EaseOutCubic), label = "ring")
-    Box(modifier = Modifier.size(136.dp), contentAlignment = Alignment.Center) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val sw = 14.dp.toPx()
-            // Outer glow ring
-            drawArc(color = Color.White.copy(0.15f), -90f, 360f, false, style = Stroke(sw + 6.dp.toPx(), cap = StrokeCap.Round))
-            drawArc(color = Color.White.copy(0.25f), -90f, 360f, false, style = Stroke(sw, cap = StrokeCap.Round))
-            drawArc(color = Color.White, -90f, 360f * progress, false, style = Stroke(sw, cap = StrokeCap.Round))
-            // Center dot
-            drawCircle(Color.White.copy(0.3f), radius = 8.dp.toPx(), center = Offset(size.width / 2, size.height / 2 - (size.minDimension / 2 - sw / 2)))
-        }
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("$targetCalories", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 30.sp)
-            Text("kcal/day", color = Color.White.copy(0.75f), fontSize = 11.sp, letterSpacing = 0.5.sp)
-        }
-    }
-}
-
-@Composable
-private fun StatPill(emoji: String, label: String, value: String) {
-    Row(modifier = Modifier.clip(RoundedCornerShape(24.dp)).background(Color.White.copy(0.18f)).padding(horizontal = 14.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(emoji, fontSize = 13.sp)
-        Text(label, color = Color.White.copy(0.75f), fontSize = 11.sp)
-        Text(value, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-    }
-}
-
-@Composable
-private fun MacroItem(label: String, value: String, color: Color, emoji: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(modifier = Modifier.size(62.dp).clip(CircleShape)
-            .background(color.copy(0.12f)).border(2.5.dp, color.copy(0.6f), CircleShape),
-            contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(emoji, fontSize = 15.sp)
-                Text(value, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = color)
-            }
-        }
-        Spacer(modifier = Modifier.height(5.dp))
-        Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Medium)
-    }
-}
-
-@Composable
-private fun MacroProgressBar(macros: MacroBreakdown) {
-    val pCal = macros.proteinG * 4f; val cCal = macros.carbsG * 4f; val fCal = macros.fatG * 9f
-    val total = (pCal + cCal + fCal).coerceAtLeast(1f)
-    val ap by animateFloatAsState((pCal / total).coerceAtLeast(0.01f), tween(1000), label = "p")
-    val ac by animateFloatAsState((cCal / total).coerceAtLeast(0.01f), tween(1000), label = "c")
-    val af by animateFloatAsState((fCal / total).coerceAtLeast(0.01f), tween(1000), label = "f")
-    Row(modifier = Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp))) {
-        Box(Modifier.weight(ap).fillMaxHeight().background(ProteinColor))
-        Box(Modifier.weight(ac).fillMaxHeight().background(CarbsColor))
-        Box(Modifier.weight(af).fillMaxHeight().background(FatColor))
-    }
-    Spacer(modifier = Modifier.height(6.dp))
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        MacroLabel("Protein", "${(pCal / total * 100).toInt()}%", ProteinColor)
-        MacroLabel("Carbs",   "${(cCal / total * 100).toInt()}%", CarbsColor)
-        MacroLabel("Fat",     "${(fCal / total * 100).toInt()}%", FatColor)
-    }
-}
-
-@Composable
-private fun MacroLabel(name: String, pct: String, color: Color) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(color))
-        Text("$name $pct", fontSize = 11.sp, color = color, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-@Composable
-private fun AiInsightCard(insight: String, isLlmEnhanced: Boolean) {
-    val colors = if (isLlmEnhanced) listOf(Color(0xFF0D47A1), Color(0xFF1976D2), Color(0xFF42A5F5))
-                 else               listOf(Color(0xFF1B5E20), Green40, GreenAccent)
-    Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        shape = RoundedCornerShape(20.dp), elevation = CardDefaults.cardElevation(6.dp)) {
-        Box(modifier = Modifier.fillMaxWidth().background(Brush.linearGradient(colors)).padding(20.dp)) {
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 10.dp)) {
-                    Box(modifier = Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(Color.White.copy(0.2f)),
-                        contentAlignment = Alignment.Center) {
-                        Text(if (isLlmEnhanced) "✨" else "🌿", fontSize = 18.sp)
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(if (isLlmEnhanced) "AI Personalized Insight" else "Diet Insight",
-                        fontWeight = FontWeight.Bold, color = Color.White, fontSize = 15.sp)
-                }
-                Text(insight, color = Color.White.copy(0.93f), fontSize = 14.sp, lineHeight = 22.sp)
-            }
-        }
-    }
-}
 
 @Composable
 private fun MealCard(meal: Meal) {

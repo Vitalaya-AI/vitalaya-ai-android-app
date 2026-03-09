@@ -1,0 +1,31 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.2.1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:generateDebugBuildConfig UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:processDebugNavigationResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:generateDebugRFile UP-TO-DATE
+> Task :app:compileDebugKotlin FAILED
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileDebugKotlin'.
+> java.io.IOException: Unable to delete directory 'C:\Products-Projects\Indian Diet Planner app\code\vitalaya_ai-android-app\app\build\intermediates\built_in_kotlinc\debug\compileDebugKotlin\classes'
+    Failed to delete some children. This might happen because a process has files open or has its working directory set in the target directory.
+    - C:\Products-Projects\Indian Diet Planner app\code\vitalaya_ai-android-app\app\build\intermediates\built_in_kotlinc\debug\compileDebugKotlin\classes\com\example
+    - C:\Products-Projects\Indian Diet Planner app\code\vitalaya_ai-android-app\app\build\intermediates\built_in_kotlinc\debug\compileDebugKotlin\classes\com
+    - C:\Products-Projects\Indian Diet Planner app\code\vitalaya_ai-android-app\app\build\intermediates\built_in_kotlinc\debug\compileDebugKotlin\classes\META-INF
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to generate a Build Scan (powered by Develocity).
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 6s
+7 actionable tasks: 1 executed, 6 up-to-date
